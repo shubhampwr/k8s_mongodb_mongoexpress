@@ -1,0 +1,134 @@
+#for MongoDB Container
+1-  While starting mongodb we need to pass environment variable. 
+    for that Create secret yaml for mongodb and give refrence in deployment file 
+#Secret:
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongo-secret
+data:
+  mongo-username: cm9vdA==
+  mongo-password: d2lmaTEyMyM=
+
+#deployment:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongoapp
+spec:
+  selector:
+    matchLabels:
+      app: mongoapp
+  template:
+    metadata:
+      labels:
+        app: mongoapp
+    spec:
+      containers:
+      - name: mongoapp
+        image: mongo
+        ports:
+        - containerPort: 27017
+        env:
+          - name: MONGO_INITDB_ROOT_USERNAME
+            valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-username  
+          - name: MONGO_INITDB_ROOT_PASSWORD
+            valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongoapp-svc
+spec:
+  selector:
+    app: mongoapp
+  ports:
+  - port: 27017
+    targetPort: 27017
+
+
+2: MongoDB express:
+    mongodbexpress is connect to mongodb pod so we need to tell mongoexpress that where is mongodb server
+    so we create configmap for mongodbexpress that containers our server
+
+#configmap
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongoexpress-configmap
+data:
+  server: mongoapp-svc
+
+
+#deployment
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongoexpress
+spec:
+  selector:
+    matchLabels:
+      app: mongoexpress
+  template:
+    metadata:
+      labels:
+        app: mongoexpress
+    spec:
+      containers:
+      - name: mongoexpress
+        image: mongo-express
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 8081
+        env:
+          - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+            valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-username
+
+          - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+            valueFrom:
+                secretKeyRef:
+                  name: mongo-secret
+                  key: mongo-password
+
+          - name: ME_CONFIG_MONGODB_SERVER
+            valueFrom:
+                configMapKeyRef:
+                  name: mongoexpress-configmap
+                  key: server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongoexpress
+spec:
+  selector:
+    app: mongoexpress
+  type: LoadBalancer
+  ports:
+  - port: 8081
+    targetPort: 8081
+    nodePort: 30001
+
+--------------------------------------------------------------------------------------------
+Configuration Order is very imprtant in K8s
+
+1: secret
+2: mongo deployment
+3: configmap
+4: mongoexpress deployment
